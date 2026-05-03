@@ -35,6 +35,10 @@ export default function Home() {
   // Тренировка
   const [trainIndex, setTrainIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
+  
+  // Статистика сессии (добавлено)
+  const [sessionRemember, setSessionRemember] = useState(0);
+  const [sessionForgot, setSessionForgot] = useState(0);
 
   useEffect(() => {
     setMounted(true);
@@ -50,11 +54,25 @@ export default function Home() {
   const fetchDueCards = useCallback(async () => {
     setLoading(true);
     const now = new Date().toISOString();
-    const { data } = await supabase.from("flashcards").select("*").lte("next_review", now).order("next_review", { ascending: true });
-    if (data) {
-      setDueCards(data);
+    
+    const { data, error } = await supabase
+      .from("flashcards")
+      .select("*")
+      .lte("next_review", now);
+
+    if (!error && data) {
+      // Перемешивание массива
+      const shuffled = [...data];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
+      setDueCards(shuffled);
       setTrainIndex(0);
       setShowAnswer(false);
+      setSessionRemember(0); // Сброс статистики при начале новой тренировки
+      setSessionForgot(0);
     }
     setLoading(false);
   }, []);
@@ -83,6 +101,11 @@ export default function Home() {
 
   const handleReview = async (remember: boolean) => {
     const card = dueCards[trainIndex];
+    
+    // Обновляем статистику сессии
+    if (remember) setSessionRemember(prev => prev + 1);
+    else setSessionForgot(prev => prev + 1);
+
     let newBox = remember ? Math.min(card.box + 1, 5) : 1;
     let days = newBox === 1 ? 1 : newBox === 2 ? 3 : newBox === 3 ? 7 : newBox === 4 ? 14 : 30;
     
@@ -109,6 +132,8 @@ export default function Home() {
         .input-field:focus { border-color: #2563eb; }
         .primary-btn { background: #2563eb; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; }
         .box-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+        .fin { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
       `}</style>
 
       <div style={{ maxWidth: 600, margin: "0 auto" }}>
@@ -116,7 +141,6 @@ export default function Home() {
           МОЙ <span style={{ color: "#2563eb" }}>СЛОВАРЬ</span>
         </h1>
 
-        {/* Tabs */}
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 24, borderBottom: "1px solid #e5e7eb" }}>
           <button className={`tab-btn ${activeTab === "dictionary" ? "active" : ""}`} onClick={() => setActiveTab("dictionary")}>Словарь</button>
           <button className={`tab-btn ${activeTab === "training" ? "active" : ""}`} onClick={() => setActiveTab("training")}>Тренировка ({dueCount})</button>
@@ -158,7 +182,10 @@ export default function Home() {
             {trainIndex >= dueCards.length ? (
               <div className="card">
                 <h2 style={{ fontFamily: "'Dela Gothic One', sans-serif" }}>Всё готово! 🎉</h2>
-                <p style={{ margin: "10px 0 20px", color: "#666" }}>Вы повторили все запланированные слова.</p>
+                <p style={{ margin: "10px 0 5px", color: "#666" }}>Вы повторили все запланированные слова.</p>
+                <p style={{ fontSize: "14px", color: "#888", marginBottom: "20px" }}>
+                  Результат: Помню: {sessionRemember} | Забыл: {sessionForgot}
+                </p>
                 <button className="primary-btn" onClick={fetchDueCards}>Начать заново</button>
               </div>
             ) : (
@@ -210,4 +237,4 @@ export default function Home() {
       </div>
     </div>
   );
-} 
+}
